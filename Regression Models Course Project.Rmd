@@ -1,0 +1,180 @@
+---
+title: "Regression Models Course Project"
+author: "Danny Beery"
+date: "2022-09-30"
+output: html_document
+---
+
+This analysis will use the 'mtcars' dataset to investigate whether there is a difference in miles per gallon in automatic and manual transmission vehicles.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r packages, message = FALSE}
+#Packages used
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(ggpubr)
+library(corrplot)
+```
+
+## Summary statistics 
+
+```{r summary statistics, auto vs manual}
+#Changing variable names out of binary notation
+mtcars$am[mtcars$am == 0] <- "Automatic"
+mtcars$am[mtcars$am == 1] <- "Manual"
+
+#Obtaining summary statistics for automatic and manual data
+mpg_by_transmission <- mtcars %>% 
+  group_by(am) %>% #0 = auto, 1 = manual
+  summarise(
+    mean_mpg = mean(mpg, na.rm = TRUE),
+    sd_mpg = sd(mpg, na.rm = TRUE),
+    var_mpg = var(mpg, na.rm = TRUE)
+  )
+mpg_by_transmission
+```
+
+As you can see, vehicles with manual transmission appear to get better mpg than vehicles with automatic transmissions, but the variance in mpg is greater among vehicles for manual transmission.
+
+Let's now visualize the data using a histogram and a boxplot. 
+
+## Visualing Data
+```{r visualing data}
+mtcars %>%
+  ggplot(aes(mpg)) +
+  geom_histogram() +
+  facet_wrap(~am) 
+
+mtcars %>%
+  ggplot(aes(y = mpg)) + 
+  geom_boxplot() + 
+  facet_wrap(~am)
+```
+
+Our plots confirm that vehicles with manual transmissions have a greater average miles per gallon and greater variability in this metric.
+
+## Hypothesis Testing 
+
+Now let's test the null hypothesis that there is no difference between the average mpg of manual and automatic transmission vehicle by creating a multi-variable linear regression model with mpg as the outcome.
+
+But first, let's take a look at a simple linear regression using transmission status as a single predictor and mpg as an outcome. 
+
+### Simple Regression Model
+```{r simple regression}
+y <- lm(mpg ~ am, data = mtcars)
+summary(y)
+y$coefficients
+```
+As you can see from the unadjusted regression model, vehicles with manual transmissions have significantly greater miles per gallon than vehicles with automatic transmission.
+
+## Checking for Potential Confounders
+
+Now let's see if any categorical variables may explain (confound) the association between mpg and transmission status. 
+
+```{r mpg vs categorical variables}
+a <- mtcars %>%
+  ggplot(aes(y = mpg)) +
+  geom_boxplot() +
+  facet_wrap(~cyl) +
+  labs(
+    title = "Cylinder"
+  ) +
+  theme(axis.text.x = element_text(angle=90, hjust=1))
+
+b <- mtcars %>%
+  ggplot(aes(y = mpg)) +
+  geom_boxplot() +
+  facet_wrap(~ vs) +
+  labs(
+    title = "VS"
+  ) +
+  theme(axis.text.x = element_text(angle=90, hjust=1))
+
+c <- mtcars %>%
+  ggplot(aes(y = mpg)) +
+  geom_boxplot() +
+  facet_wrap(~gear) +
+  labs(
+    title = "Gear"
+  ) +
+  theme(axis.text.x = element_text(angle=90, hjust=1))
+
+d <- mtcars %>%
+  ggplot(aes(y = mpg)) +
+  geom_boxplot() +
+  facet_wrap(~carb) +
+  labs(
+    title = "Carb"
+  ) +
+  theme(axis.text.x = element_text(angle=90, hjust=1))
+ggarrange(a,b,c,d, ncol = 2, nrow = 2)
+```
+
+It looks like all 4 categorical variables are potentially confounding the association between transmission status and miles per gallon, thus, we should add these variables as predictors to our multivariable regression.
+
+Now let's see if any continuous variables may explain (confound) the association between mpg and transmission status.
+
+```{r continuous confounders}
+e <- mtcars %>%
+  ggplot(aes(disp, mpg)) + 
+  geom_smooth() +
+  labs(title = "Disp") +
+  theme(axis.text.x = element_text(angle=90, hjust=1))
+f <- mtcars %>%
+  ggplot(aes(hp, mpg)) + 
+  geom_smooth() +
+  labs(title = "HP") +
+  theme(axis.text.x = element_text(angle=90, hjust=1))
+g <- mtcars %>%
+  ggplot(aes(drat, mpg)) + 
+  geom_smooth() +
+  labs(title = "Drat") +
+  theme(axis.text.x = element_text(angle=90, hjust=1))
+h <- mtcars %>%
+  ggplot(aes(wt, mpg)) + 
+  geom_smooth() +
+  labs(title = "Weight") +
+  theme(axis.text.x = element_text(angle=90, hjust=1))
+i <- mtcars %>%
+  ggplot(aes(qsec, mpg)) + 
+  geom_smooth() +
+  labs(title = "Qsec") +
+  theme(axis.text.x = element_text(angle=90, hjust=1))
+ggarrange(e, f, g, h, i, ncol = 3, nrow = 2)
+
+#Correlation Plot
+mtcars_cor <- mtcars[c(1,3,4,5,6,7)] 
+cor(mtcars_cor)
+corrplot(cor(mtcars_cor), "number")
+```
+
+From the plots and correlations above, it looks like all 4 continuous variables potentially confound the association between mpg and type of transmission. We will include these variables in our multivariate regression model. 
+
+```{r multivarite regression}
+y2 <- lm(data = mtcars, mpg ~ am + as.factor(cyl) + disp + hp + drat + wt + qsec + vs + gear + carb)
+y2$coefficients
+confint(y2)
+```
+
+After adjusting for all the potential confounders, it appears that type of transmission has no effect on mpg (confidence interval contains 0). 
+
+## Multivariate Regression Model
+Let's check the appropriateness of our multivariate regression model.
+
+## Assessing Model Fit
+
+```{r model fit}
+plot(y2)
+```
+
+As you can see from the residuals vs fitted plot and QQ plot, the linear model seems to be quite appropriate for the data.
+
+# Conclusion
+
+After performing a multivariate regression analysis of the data, we conclude that there is no difference in miles per gallon between automatic and manual transmission vehicles. Any differences in miles per gallon between automatic and manual transmission vehicles can be explained by confounding factors. 
+
+
